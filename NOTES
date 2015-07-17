@@ -1,0 +1,15 @@
+MDFS is a massively-distributed, pluggable, cryptographic filesystem
+
+MDFS has the following features and capabilities:
+
+* Fully modular -- The file system is not a file system per se, as it is a filesystem kernel
+The filesystem is made up of several modules. For example, a module for "local drives" would allow parts of the filesystem to be mapped locally
+
+A filesystem for "network drives" would allow access to particular networked computers
+However; the exposure of the filesystem to user-space does not distinguish individual devices or storage locations -- all are treated equally
+Each module can register a number of nodes. Each node has a GUID. Each GUID corresponds to a physical device.
+The filesystem will by default write each block (identified by a GUID) to 3 different nodes.
+A minimum of 3 is recommended for fast and stable operations.
+If a node is taken offline, it is immediately replicated to other available nodes.
+If no nodes are available for a given block, an I/O error is returned for that portion of the filesystem.
+
