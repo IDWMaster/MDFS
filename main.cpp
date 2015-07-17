@@ -103,40 +103,48 @@ public:
 };
 */
 
-template<typename T,typename Y>
-static bool Find(T& searchval, Y array,size_t len, size_t& position) {
+template<typename T>
+static bool Find(T searchval, T* array,size_t len, size_t& position) {
+  T* origpos = array;
   position = 0;
   if(len == 0) {
     return false;
   }
-  size_t start = 0;
-  size_t end = len-1;
-  while(end>start) {
-    size_t avail = (end-start)+1;
-    position = avail/2; //relative offset
-    if(array[start+position] == searchval) {
-      position = start+position;
+  while(len>0) {
+    position = len/2;
+    if(array[position] == searchval) {
       return true;
     }
-    if(searchval<array[start+position]) {
-      //Value is to democrat of this one
-      end = (start+position)-1;
+    if(searchval<array[position]) {
+      len=position;
     }else {
-      //Value is to republican
-      start = start+position+1;
+      array+=position+1;
+      len-=position+1;
     }
   }
-  position = start+position;
-  if(position>len) {
-    position = len;
-  }
-  return false;
+  position = array-origpos;
 }
-template<typename T,typename Y>
-static void Insert(T val, Y array, size_t oldlen) {
-  size_t index = 0;
-  Find(val,array,oldlen,index);
-  array[index] = val;
+template<typename T>
+static void Insert(T val, T* array, size_t oldlen) {
+  for(size_t i = 0;i<oldlen;i++) {
+    size_t pos = 0;
+    if(!Find(array[i],array,oldlen,pos)) {
+      printf("Scan error at index %i\n",i);
+      throw "across";
+    }
+  }
+  
+  
+  size_t marker = 0;
+  Find(val,array,oldlen,marker);
+  printf("Insertion: %i\n",(int)marker);
+  //Insert at insertion marker, move everything to the right
+  memmove(array+marker+1,array+marker,(oldlen-marker)*sizeof(val));
+  array[marker] = val;
+  for(size_t i = 0;i<5;i++) {
+    printf("%i\n",array[i]);
+  }
+  printf("====================\n");
 }
 
 
@@ -164,17 +172,13 @@ static void AES_Decrypt(const unsigned char* key, uint64_t* id, uint64_t blockse
 int main(int argc, char** argv) {
   
   int vals[120];
-  vals[0] = 100;
-  vals[1] = 120;
-  vals[2] = 150;
-  vals[3] = 160;
-  vals[4] = 170;
-  vals[5] = 175;
-  int sval = 180;
-  size_t pos = 0;
-  bool found = Find(sval,vals,6,pos);
-  printf("%s,%i\n",found ? "true" : "false",(int)pos);
   
+  memset(vals,0,sizeof(int)*120);
+  Insert(5,vals,0);
+  Insert(-90,vals,1);
+  Insert(-900,vals,2);
+  Insert(80,vals,3);
+  Insert(85,vals,4);
   
   /*
   localstordir = "blocks/";
