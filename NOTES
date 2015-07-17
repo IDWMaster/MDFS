@@ -11,5 +11,5 @@ Each module can register a number of nodes. Each node has a GUID. Each GUID corr
 The filesystem will by default write each block (identified by a GUID) to 3 different nodes.
 A minimum of 3 is recommended for fast and stable operations.
 If a node is taken offline, it is immediately replicated to other available nodes.
-If no nodes are available for a given block, an I/O error is returned for that portion of the filesystem.
+If no nodes are available for a given block, an I/O error is returned for that portion of the filesystem. Other portions can still be accessed, and the filesystem is designed to allow for portions to go down without impacting the availability of the overall filesystem.
 
