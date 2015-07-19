@@ -12,7 +12,8 @@
 #include <unistd.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
-/*
+#include <GGRouter.h>
+
 class GUID {
 public:
   uint64_t val[2];
@@ -29,21 +30,21 @@ public:
 
 static std::mutex mtx;
 
-static std::map<GUID,Plugin_Operations> plugins;
 static char* localstordir;
 
-static void local_fetch(void* thisptr, void* output, const unsigned char* id,uint64_t offset, uint64_t* sz) {
+static bool local_fetch(void* thisptr, void* output, const unsigned char* id,uint64_t offset, uint64_t* sz) {
   char mander[256];
   uuid_unparse(id,mander);
   std::stringstream ss;
   ss<<localstordir<<"/"<<mander;
-  int fd = open64(ss.str(),O_RDONLY);
+  std::string mm = ss.str();
+  int fd = open64(mm.data(),O_RDONLY);
   lseek64(fd,offset,SEEK_SET);
   *sz = read(fd,output,*sz);
   close(fd);
 }
 
-static void local_put(void* thisptr, const void* input, const unsigned char* id,uint64_t offset, uint64_t sz) {
+static bool local_put(void* thisptr, const void* input, const unsigned char* id,uint64_t offset, uint64_t sz) {
   char mander[256];
   uuid_unparse(id,mander);
   std::stringstream ss;
@@ -51,45 +52,38 @@ static void local_put(void* thisptr, const void* input, const unsigned char* id,
   std::string mt = ss.str();
   int fd = open64(mt.data(),O_RDWR);
   lseek64(fd,offset,SEEK_SET);
-  *sz = write(fd,input,*sz);
+  write(fd,input,sz);
   close(fd);
+  return true;
 }
 
 static char GLOBAL_KEY[32];
 static GUID GLOBAL_ROOT;
 
+class PendingRequest {
+public:
+  PendingRequest() {
+  }
+};
+
+
+static std::shared_ptr<GUID,GGClient::WaitHandle> pendingRequests;
+
+
+
+
+
 extern "C" {
   
   
-  static int EnumerateDirectory(const char* path, fuse_dirh_t handle, fuse_dirfil_t_compat fill) {
-    
-    return 0;
-  }
-  void Register_Plugin(unsigned char* id,const Plugin_Operations* ops) {
-    mtx.lock();
-    plugins[id] = *ops;
-    mtx.unlock();
-  }
-  void Unregister_Plugin(unsigned char* id) {
-    mtx.lock();
-    plugins.erase(id);
-    mtx.unlock();
-  }
+  
   void REG_Base_Plugins() {
-    Plugin_Operations localfs;
-    localfs.Fetch = local_fetch;
-    localfs.Put = local_put;
-    unsigned char pid[16];
-    memset(pid,0,16);
-    Register_Plugin(pid,&localfs);
+    
   }
+  
+  
 }
 
-typedef struct {
-  char name[256]; //Name
-  unsigned char ent_type; //Type
-  uint64_t dptr; //Data pointer
-} BLOCK_ENTRY;
 class BLOCK_ENTRY {
 public:
   BLOCK_ENTRY() {
@@ -101,7 +95,6 @@ public:
     return strcmp(name,other.name) < 0;
   }
 };
-*/
 
 template<typename T>
 static bool Find(T searchval, T* array,size_t len, size_t& position) {
@@ -126,29 +119,18 @@ static bool Find(T searchval, T* array,size_t len, size_t& position) {
 }
 template<typename T>
 static void Insert(T val, T* array, size_t oldlen) {
-  for(size_t i = 0;i<oldlen;i++) {
-    size_t pos = 0;
-    if(!Find(array[i],array,oldlen,pos)) {
-      printf("Scan error at index %i\n",i);
-      throw "across";
-    }
-  }
+  
   
   
   size_t marker = 0;
   Find(val,array,oldlen,marker);
-  printf("Insertion: %i\n",(int)marker);
   //Insert at insertion marker, move everything to the right
   memmove(array+marker+1,array+marker,(oldlen-marker)*sizeof(val));
   array[marker] = val;
-  for(size_t i = 0;i<5;i++) {
-    printf("%i\n",array[i]);
-  }
-  printf("====================\n");
 }
 
 
-/*static void AES_Encrypt(const unsigned char* key,uint64_t* id, uint64_t blocksegmentid, unsigned char* data) {
+static void AES_Encrypt(const unsigned char* key,uint64_t* id, uint64_t blocksegmentid, unsigned char* data) {
   AES_KEY akey;
   AES_set_encrypt_key(key,256,&akey);
   //XOR block
@@ -163,24 +145,70 @@ static void AES_Decrypt(const unsigned char* key, uint64_t* id, uint64_t blockse
   AES_set_decrypt_key(key,256,&akey);
   uint64_t blocks[2];
   memcpy(blocks,data,16);
-  AES_decrypt(blocks,blocks,&akey);
+  AES_decrypt((unsigned char*)blocks,(unsigned char*)blocks,&akey);
   blocks[0] ^= id[0] ^ blocksegmentid;
   blocks[1] ^= id[1] ^ blocksegmentid;
-}*/
+}
 
+
+//Fetch data from a block
+static bool Block_Fetch(const unsigned char* key, const GUID& id, uint64_t offset, uint64_t* count, void* output) {
+  //Dispatch request to all providers
+  Plugin_Message msg;
+  MakeMessage(msg);
+}
+
+
+
+
+class EncryptedStream {
+public:
+  GUID baseIndex;
+  unsigned char key[32];
+  EncryptedStream(const GUID& baseGuid, const unsigned char* key) {
+    baseIndex = baseGuid;
+    //NOTE: Allocation block size is determined by block header. Block size must be divisible by 16.
+    /*HEADER STRUCTURE
+     * Block size (uint32_t)
+     * Number of blocks in list (uint64_t)
+     * User attributes (uint32_t)
+     * Block list
+     * */
+    uint64_t data[2];
+    
+  }
+  
+};
+
+
+
+static std::string GetLocalPath(const GUID& guid) {
+  
+    std::stringstream ss;
+    char mander[256];
+    uuid_unparse((unsigned char*)guid.val,mander);
+    ss<<localstordir<<"/"<<mander;
+    return ss.str();
+}
+  static void GetFSPointer(const char* path, GUID& output) {
+    std::string local_root = GetLocalPath(GLOBAL_ROOT);
+    char* path_temp = new char[strlen(path)+1];
+    memcpy(path_temp,path,strlen(path)+1);
+    
+    delete[] path_temp;
+  }
+  
+  static int EnumerateDirectory(const char* path, fuse_dirh_t handle, fuse_dirfil_t_compat fill) {
+    //Get GLOBAL_ROOT
+    //localstordir
+    std::string path = GetLocalPath(GLOBAL_ROOT);    
+    return 0;
+  }
 
 int main(int argc, char** argv) {
   
-  int vals[120];
   
-  memset(vals,0,sizeof(int)*120);
-  Insert(5,vals,0);
-  Insert(-90,vals,1);
-  Insert(-900,vals,2);
-  Insert(80,vals,3);
-  Insert(85,vals,4);
   
-  /*
   localstordir = "blocks/";
 fuse_operations opt;
 memset(&opt,0,sizeof(opt));
@@ -188,22 +216,20 @@ struct fuse_operations op;
 int fd;
 if((fd = open("config",O_RDONLY)) == -1) {
   //Create config file
-  fd = open("config",O_CREAT);
+  fd = open("config",O_CREAT | O_RDWR, S_IRUSR | S_IRGRP);
   unsigned char initBlockID[16];
   uuid_generate(initBlockID);
   unsigned char key[32];
   while(RAND_pseudo_bytes(key,32) == 0) {};
   write(fd,initBlockID,16);
   write(fd,key,32);
- close(fd); 
+  close(fd); 
  
 fd = open("config",O_RDONLY);
 }
 read(fd,GLOBAL_ROOT.val,16);
 read(fd,GLOBAL_KEY,32);
+fuse_main(argc,argv,&op);
 
-
-fuse_main(argc,argv,&op,0);
-*/
 return 0;
 }
