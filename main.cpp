@@ -60,12 +60,9 @@ static bool local_put(void* thisptr, const void* input, const unsigned char* id,
 static char GLOBAL_KEY[32];
 static GUID GLOBAL_ROOT;
 
-class PendingRequest {
-public:
-  PendingRequest() {
-  }
-};
 
+
+//Pending request list
 
 static std::shared_ptr<GUID,GGClient::WaitHandle> pendingRequests;
 
