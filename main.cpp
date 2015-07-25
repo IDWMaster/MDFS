@@ -14,6 +14,8 @@
 #include <openssl/rand.h>
 #include <GGRouter.h>
 
+
+namespace MDFS {
 class GUID {
 public:
   uint64_t val[2];
@@ -64,7 +66,7 @@ static GUID GLOBAL_ROOT;
 
 //Pending request list
 
-static std::shared_ptr<GUID,GGClient::WaitHandle> pendingRequests;
+static std::map<GUID,GGClient::WaitHandle> pendingRequests;
 
 
 
@@ -148,12 +150,6 @@ static void AES_Decrypt(const unsigned char* key, uint64_t* id, uint64_t blockse
 }
 
 
-//Fetch data from a block
-static bool Block_Fetch(const unsigned char* key, const GUID& id, uint64_t offset, uint64_t* count, void* output) {
-  //Dispatch request to all providers
-  Plugin_Message msg;
-  MakeMessage(msg);
-}
 
 
 
@@ -195,17 +191,14 @@ static std::string GetLocalPath(const GUID& guid) {
     delete[] path_temp;
   }
   
-  static int EnumerateDirectory(const char* path, fuse_dirh_t handle, fuse_dirfil_t_compat fill) {
+  static int EnumerateDirectory(const char* _path, fuse_dirh_t handle, fuse_dirfil_t_compat fill) {
     //Get GLOBAL_ROOT
     //localstordir
     std::string path = GetLocalPath(GLOBAL_ROOT);    
     return 0;
   }
 
-int main(int argc, char** argv) {
-  
-  
-  
+static int Main(int argc, char** argv) {
   localstordir = "blocks/";
 fuse_operations opt;
 memset(&opt,0,sizeof(opt));
@@ -229,4 +222,16 @@ read(fd,GLOBAL_KEY,32);
 fuse_main(argc,argv,&op);
 
 return 0;
+
 }
+
+}
+
+
+
+
+int main(int argc, char** argv) {
+  
+  return MDFS::Main(argc,argv);
+  
+  }
