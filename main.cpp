@@ -34,6 +34,30 @@ public:
 };
 
 
+
+
+static void AES_Encrypt(const unsigned char* key,uint64_t* id, uint64_t blocksegmentid, unsigned char* data) {
+  AES_KEY akey;
+  AES_set_encrypt_key(key,256,&akey);
+  //XOR block
+  uint64_t blocks[2];
+  memcpy(blocks,data,16);
+  blocks[0] ^= id[0] ^ blocksegmentid;
+  blocks[1] ^= id[1] ^ blocksegmentid;
+  AES_encrypt(data,data,&akey);  
+}
+static void AES_Decrypt(const unsigned char* key, uint64_t* id, uint64_t blocksegmentid, unsigned char* data) {
+  AES_KEY akey;
+  AES_set_decrypt_key(key,256,&akey);
+  uint64_t blocks[2];
+  memcpy(blocks,data,16);
+  AES_decrypt((unsigned char*)blocks,(unsigned char*)blocks,&akey);
+  blocks[0] ^= id[0] ^ blocksegmentid;
+  blocks[1] ^= id[1] ^ blocksegmentid;
+}
+
+
+
 static std::mutex mtx;
 
 static char* localstordir;
@@ -98,18 +122,38 @@ static GGClient::WaitHandle* RequestBlockSegment(const BlockRequest& req) {
   return bot;
 }
 
+static uint64_t blockSize = 1024*4;
 
 
-static bool RetrieveBlock(const GUID& block, uint64_t position, uint64_t len, void* output) {
+//TODO: Retrieve and verify block (4KB block size)
+
+static inline void XOR_Block(uint64_t* aligned_block) {
+  
+}
+
+
+static bool RetrieveBlock(const GUID& block, uint64_t position, const unsigned char* key,  void* output) {
   BlockRequest req;
   req.block = block;
-  req.offset = position;
-  req.len = len;
+  req.offset = position*blockSize;
+  req.len = blockSize;
   GGClient::WaitHandle* wh = RequestBlockSegment(req);
   wh->Fetch();
-  if(wh->data) {
-    memcpy(output,wh->data,len);
+  
+  
+  //TODO: To create a hash algorithm, CBC must be used across the whole block. This operation is impossible to parallelize and
+//there is no way around this performance issue.  
+  
+  for(size_t i = 0;i<blockSize;i+=16) {
+    AES_Decrypt(key,block.val,position,wh->data+i);
+    //TODO: XOR block
+    
   }
+  if(wh->data) {
+    memcpy(output,wh->data,blockSize);
+  }
+  
+  
   wh->Unfetch();
   return wh->data;
   
@@ -152,6 +196,7 @@ extern "C" {
     }
     mtx.unlock();
   }
+  
   
   
   
@@ -203,25 +248,6 @@ static void Insert(T val, T* array, size_t oldlen) {
 }
 
 
-static void AES_Encrypt(const unsigned char* key,uint64_t* id, uint64_t blocksegmentid, unsigned char* data) {
-  AES_KEY akey;
-  AES_set_encrypt_key(key,256,&akey);
-  //XOR block
-  uint64_t blocks[2];
-  memcpy(blocks,data,16);
-  blocks[0] ^= id[0] ^ blocksegmentid;
-  blocks[1] ^= id[1] ^ blocksegmentid;
-  AES_encrypt(data,data,&akey);  
-}
-static void AES_Decrypt(const unsigned char* key, uint64_t* id, uint64_t blocksegmentid, unsigned char* data) {
-  AES_KEY akey;
-  AES_set_decrypt_key(key,256,&akey);
-  uint64_t blocks[2];
-  memcpy(blocks,data,16);
-  AES_decrypt((unsigned char*)blocks,(unsigned char*)blocks,&akey);
-  blocks[0] ^= id[0] ^ blocksegmentid;
-  blocks[1] ^= id[1] ^ blocksegmentid;
-}
 
 
 
@@ -229,6 +255,17 @@ static void AES_Decrypt(const unsigned char* key, uint64_t* id, uint64_t blockse
 
 //TODO: Hash data into blocks of 4KB using AES-CBC as hashing algorithm to prevent manipulation of data
 //Last 4KB of data in each chunk will be all zeroes. If the data is NOT all zeroes; it indicates the block is corrupt.
+
+
+
+
+
+//TODO: Index record format:
+//Each index record will have a child GUID, version number of child (must match version number at beginning of stream), and encryption key for child file
+
+
+
+
 
 
 class EncryptedStream {
